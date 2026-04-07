@@ -148,7 +148,7 @@ class SQLServerMetadata:
             INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
             INNER JOIN sys.tables t ON i.object_id = t.object_id
             INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-            WHERE i.is_unique = 1 AND i.type_description != 'HEAP'
+            WHERE i.is_unique = 1 AND i.type_desc != 'HEAP'
               AND s.name = ? AND t.name = ? AND c.name = ?
         """
         return self._execute_exists(query, (schema, table, column), cursor)
