@@ -17,6 +17,102 @@ Datamasker generates SQL Server data masking scripts from JSON configuration fil
 5. Review the generated `masking.sql`
 6. Execute `masking.sql` manually via sqlcmd or another SQL Server tool
 
+## PowerShell Wrapper
+
+A production-ready PowerShell wrapper script is provided for Windows environments. The wrapper orchestrates the Python CLI and adds support for scheduled execution, confirmation prompts, and dry-run validation.
+
+**File**: `scripts/datamasker.ps1`
+
+### PowerShell Wrapper Features
+
+- **Direct Python invocation**: Calls the virtualenv Python executable directly without interactive activation
+- **Parameter-driven actions**: EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun
+- **Automation support**: NoConfirm and DryRun switches for scripted/scheduled usage
+- **Clear operational messages**: Timestamped INFO/WARN/ERROR/SUCCESS messages
+- **Exit codes**: 0 for success, 1 for errors, 2 for invalid parameter combinations
+
+### Invoking the VirtualEnv Python
+
+The wrapper calls `.venv\Scripts\python.exe` directly:
+
+```powershell
+& $PythonExe -m app.cli <command>
+```
+
+This avoids interactive shell activation and is suitable for non-interactive Task Scheduler scenarios.
+
+### PowerShell Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `-Action` | Yes | Operation: EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun |
+| `-Config` | For GenerateSql, FullRun | Path to functional masking configuration JSON |
+| `-Connection` | For TestConnection, GenerateSql, ExecuteSql, FullRun | Path to technical connection configuration JSON |
+| `-SqlFile` | No | Output/input path for masking.sql (default: .\masking.sql) |
+| `-ProjectRoot` | No | Datamasker project root (default: script parent directory) |
+| `-PythonExe` | No | Python executable path (default: .\.venv\Scripts\python.exe) |
+| `-NoConfirm` | No | Suppress confirmation prompts for automation |
+| `-DryRun` | No | Validate but skip actual SQL execution |
+| `-LogFile` | No | Optional log file path |
+
+### PowerShell Action Details
+
+#### EncryptPassword
+
+Prompts for the SQL Server password (without echo) and calls the Python CLI `encrypt-password` command to create the DPAPI-encrypted password file. The password is never displayed.
+
+```powershell
+.\scripts\datamasker.ps1 -Action EncryptPassword
+```
+
+#### TestConnection
+
+Validates the connection JSON, checks the DPAPI password file exists, and calls the Python CLI `test-connection` command. Does not generate or execute SQL.
+
+```powershell
+.\scripts\datamasker.ps1 -Action TestConnection -Connection ".\sample.connection.json"
+```
+
+#### GenerateSql
+
+Validates inputs, calls the Python CLI `generate` command, and produces `masking.sql`. Does not execute SQL.
+
+```powershell
+.\scripts\datamasker.ps1 -Action GenerateSql -Config ".\sample.masking.json" -Connection ".\sample.connection.json"
+```
+
+#### ExecuteSql
+
+Executes an existing `masking.sql` through sqlcmd. Prompts for confirmation unless `-NoConfirm` is provided.
+
+```powershell
+.\scripts\datamasker.ps1 -Action ExecuteSql -Connection ".\sample.connection.json" -SqlFile ".\masking.sql"
+.\scripts\datamasker.ps1 -Action ExecuteSql -Connection ".\sample.connection.json" -SqlFile ".\masking.sql" -NoConfirm
+```
+
+#### FullRun
+
+Performs the complete end-to-end workflow:
+
+1. Validates environment
+2. Tests connection
+3. Generates masking.sql
+4. Executes masking.sql via sqlcmd
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json"
+```
+
+#### DryRun Mode
+
+With `-DryRun`, FullRun and ExecuteSql validate everything and generate SQL but skip actual sqlcmd execution:
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json" -DryRun
+```
+
+This shows what would be executed without making database changes.
+
 ## Configuration File Architecture
 
 ```
@@ -31,6 +127,8 @@ datamasker/
     validator.py            # Rule validation against metadata
     sql_generator.py        # SQL script generation
     secret_store.py         # DPAPI encryption/decryption
+  scripts/
+    datamasker.ps1          # PowerShell wrapper
   tests/                    # Unit tests
   secrets/                  # Directory for encrypted password files (not committed)
   sample.masking.json       # Sample functional configuration
@@ -104,17 +202,17 @@ The technical configuration file (`sample.connection.json`) defines database con
 ```json
 {
   "server": "SQL01",
-  "database": "MyDb",
   "username": "masking_user",
-  "passwordFile": "secrets/sql-password.dpapi"
+  "passwordFile": "secrets/sql-password.dpapi",
+  "databases": ["MyDb", "MyDb2", "MyDb3"]
 }
 ```
 
 **Fields**:
 - `server`: SQL Server host name or IP address.
-- `database`: Target database name.
 - `username`: SQL Server login name.
 - `passwordFile`: Path to the DPAPI-encrypted password file.
+- `databases`: Array of database names to process.
 
 **Important**: This file contains no clear-text password. The actual password is stored separately in the DPAPI file.
 
@@ -145,7 +243,13 @@ DPAPI (Data Protection API) is a Windows cryptographic API that protects data us
 
 ## Creating the DPAPI Password File
 
-### Step-by-Step Instructions
+### Using the PowerShell Wrapper
+
+```powershell
+.\scripts\datamasker.ps1 -Action EncryptPassword
+```
+
+### Step-by-Step Instructions (Manual)
 
 1. **Ensure you are on the target Windows server** (or an account that will run Datamasker).
 
@@ -158,7 +262,7 @@ DPAPI (Data Protection API) is a Windows cryptographic API that protects data us
    ```cmd
    python -m app.cli encrypt-password --output secrets/sql-password.dpapi
    ```
-   
+
    When prompted, enter the SQL Server password. The password is encrypted immediately and stored in the file. It is never displayed or logged.
 
 4. **Verify the file was created**:
@@ -174,7 +278,7 @@ DPAPI (Data Protection API) is a Windows cryptographic API that protects data us
 Enter SQL Server password: ********
 SUCCESS: Password encrypted and saved to 'secrets\sql-password.dpapi'
 NOTE: This file is encrypted with DPAPI and can only be decrypted
-      by the same Windows user account on the same machine.
+       by the same Windows user account on the same machine.
 ```
 
 ## Protecting Secrets with NTFS ACLs
@@ -200,7 +304,7 @@ icacls secrets
 
 Expected output should show only the authorized user with access.
 
-## Command-Line Usage
+## Command-Line Usage (Python CLI)
 
 ### Encrypt Password (DPAPI)
 
@@ -240,6 +344,150 @@ generate:
 test-connection:
   --connection, -cn  Technical configuration JSON file
 ```
+
+## PowerShell Wrapper Examples
+
+### Encrypt Password
+
+```powershell
+.\scripts\datamasker.ps1 -Action EncryptPassword
+```
+
+Prompts for password, encrypts with DPAPI, saves to `secrets\sql-password.dpapi`.
+
+### Test Connection
+
+```powershell
+.\scripts\datamasker.ps1 -Action TestConnection -Connection ".\sample.connection.json"
+```
+
+Validates the connection file and DPAPI password file, tests SQL Server connectivity.
+
+### Generate SQL
+
+```powershell
+.\scripts\datamasker.ps1 -Action GenerateSql -Config ".\sample.masking.json" -Connection ".\sample.connection.json"
+```
+
+Generates `masking.sql` without executing it.
+
+### Execute SQL (with confirmation)
+
+```powershell
+.\scripts\datamasker.ps1 -Action ExecuteSql -Connection ".\sample.connection.json" -SqlFile ".\masking.sql"
+```
+
+Prompts for SQL Server password and executes `masking.sql` via sqlcmd.
+
+### Full Run
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json"
+```
+
+Tests connection, generates SQL, and executes it (with confirmation).
+
+### Full Run with NoConfirm
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json" -NoConfirm
+```
+
+Full run without prompts. Suitable for automation and scripting.
+
+### Full Run with DryRun
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json" -DryRun
+```
+
+Validates everything and generates SQL but skips sqlcmd execution. Shows what would be executed.
+
+## Windows Task Scheduler Usage
+
+The PowerShell wrapper is designed for non-interactive scheduled execution.
+
+### Scheduler Example
+
+```
+powershell.exe -ExecutionPolicy Bypass -File "C:\tools\datamasker\scripts\datamasker.ps1" -Action FullRun -Config "C:\tools\datamasker\sample.masking.json" -Connection "C:\tools\datamasker\sample.connection.json" -SqlFile "C:\tools\datamasker\masking.sql" -NoConfirm
+```
+
+This command:
+- `-ExecutionPolicy Bypass`: Allows script execution without changing system policy
+- `-File`: Specifies the wrapper script path
+- `-Action FullRun`: Performs complete workflow
+- `-Config` and `-Connection`: Paths to configuration files
+- `-SqlFile`: Output/input SQL file path
+- `-NoConfirm`: Skips interactive prompts (required for scheduled tasks)
+
+### DPAPI and Scheduled Tasks
+
+DPAPI decryption depends on the Windows account context. The encrypted password file must have been generated by the same Windows user account that runs the scheduled task. If the task runs under a service account, generate the DPAPI file using that same account first.
+
+### Scheduled Task Configuration Best Practices
+
+1. Create the DPAPI password file while logged in as the service account
+2. Use a dedicated service account with minimal permissions
+3. Set the working directory to the Datamasker project root
+4. Use `-NoConfirm` for fully automated execution
+5. Redirect output to a log file using `-LogFile`
+
+## Manual Execution of masking.sql via sqlcmd
+
+**Important**: Python never executes the masking UPDATE statements. The SQL script must be executed manually by an operator.
+
+### Basic Execution
+
+```cmd
+sqlcmd -S SQL01 -d MyDb -U masking_user -i masking.sql
+```
+
+This command:
+- `-S SQL01`: Connects to SQL01 server
+- `-d MyDb`: Uses MyDb database
+- `-U masking_user`: Authenticates with SQL login (password will be prompted)
+- `-i masking.sql`: Executes the masking script from file
+
+### With Password (Not Recommended)
+
+```cmd
+sqlcmd -S SQL01 -d MyDb -U masking_user -P MyPassword -i masking.sql
+```
+
+**Warning**: Using `-P` exposes the password in clear text on the command line. This is visible in:
+- Process lists (`wmic process get commandline`)
+- Log files
+- Shell history
+
+Prefer using `-U` without `-P` and entering the password when prompted, or use Windows Authentication (`-E`) if available.
+
+### Windows Authentication
+
+If the SQL Server supports Windows Authentication and the current user has access:
+
+```cmd
+sqlcmd -S SQL01 -d MyDb -E -i masking.sql
+```
+
+### Verify Before Execution
+
+To review the script without executing:
+
+```cmd
+type masking.sql
+```
+
+Or open `masking.sql` in a text editor before running.
+
+### Dry Run (What-If)
+
+To see what would be updated without making changes (SQL Server Management Studio):
+
+1. In SSMS, open `masking.sql`
+2. Click "Analyze" to check for syntax errors
+3. Use `SET STATISTICS IO ON` and `SET STATISTICS TIME ON` before running
+4. Review the number of rows affected
 
 ## Example Generation Command
 
@@ -300,6 +548,7 @@ If any rule violates these constraints, the generator stops and reports the erro
 |-----------|---------|
 | 0 | Success |
 | 1 | Error (configuration, validation, secret, or execution error) |
+| 2 | Invalid parameter combination |
 
 All errors are written to stderr with clear messages. Passwords never appear in error messages or logs.
 
@@ -334,6 +583,8 @@ datamasker/
     validator.py             # Rule validation
     sql_generator.py         # SQL generation
     secret_store.py          # DPAPI operations
+  scripts/
+    datamasker.ps1           # PowerShell wrapper
   tests/
     test_*.py                # Unit tests
   secrets/                   # DPAPI password files (not in git)
@@ -347,13 +598,15 @@ datamasker/
 
 1. **DPAPI is Windows-only**: Password encryption and decryption only work on Windows with the same user account.
 
-2. **No SQL execution**: Python never executes UPDATE statements. All masking must be applied manually.
+2. **No SQL execution**: Python never executes UPDATE statements. All masking must be applied manually or via PowerShell wrapper with explicit ExecuteSql or FullRun action.
 
 3. **Validation requires read access**: The generator needs SELECT permission on system catalogs (`sys.tables`, `sys.columns`, `sys.foreign_keys`, etc.).
 
 4. **Deterministic but not random**: Masking values are deterministic based on `ROW_NUMBER()` and `orderBy` column. This is intentional for reproducibility.
 
 5. **No rollback script**: The generator does not create rollback scripts. Backups should be taken before execution.
+
+6. **sqlcmd credential handling**: The PowerShell wrapper does not pass passwords to sqlcmd on the command line. Use SQL authentication with `-U` and password prompt, or prefer Windows Authentication (`-E`). Using `-P MyPassword` exposes the password in process listings and logs.
 
 ## Operational Best Practices
 
@@ -369,65 +622,15 @@ datamasker/
 
 6. **Document the masking process**. Keep records of which environments have been masked and when.
 
-## Manual Execution of masking.sql via sqlcmd
+7. **Use DryRun before FullRun** to validate the workflow without making database changes.
 
-**Important**: Python never executes the masking UPDATE statements. The SQL script must be executed manually by an operator.
+8. **Use consistent account context** for DPAPI encryption and scheduled task execution.
 
-### Basic Execution
+## Complete End-to-End Workflow Examples
 
-```cmd
-sqlcmd -S SQL01 -d MyDb -U masking_user -i masking.sql
-```
+### Using PowerShell Wrapper
 
-This command:
-- `-S SQL01`: Connects to SQL01 server
-- `-d MyDb`: Uses MyDb database
-- `-U masking_user`: Authenticates with SQL login (password will be prompted)
-- `-i masking.sql`: Executes the masking script from file
-
-### With Password (Not Recommended)
-
-```cmd
-sqlcmd -S SQL01 -d MyDb -U masking_user -P MyPassword -i masking.sql
-```
-
-**Warning**: Using `-P` exposes the password in clear text on the command line. This is visible in:
-- Process lists (`wmic process get commandline`)
-- Log files
-- Shell history
-
-Prefer using `-U` without `-P` and entering the password when prompted, or use Windows Authentication (`-E`) if available.
-
-### Windows Authentication
-
-If the SQL Server supports Windows Authentication and the current user has access:
-
-```cmd
-sqlcmd -S SQL01 -d MyDb -E -i masking.sql
-```
-
-### Verify Before Execution
-
-To review the script without executing:
-
-```cmd
-type masking.sql
-```
-
-Or open `masking.sql` in a text editor before running.
-
-### Dry Run (What-If)
-
-To see what would be updated without making changes (SQL Server Management Studio):
-
-1. In SSMS, open `masking.sql`
-2. Click "Analyze" to check for syntax errors
-3. Use `SET STATISTICS IO ON` and `SET STATISTICS TIME ON` before running
-4. Review the number of rows affected
-
-## Complete End-to-End Workflow Example
-
-### 1. Set Up Environment
+#### 1. Set Up Environment
 
 ```cmd
 git clone <repository>
@@ -437,7 +640,45 @@ venv\Scripts\activate
 pip install pyodbc pytest
 ```
 
-### 2. Create Secrets Directory and Encrypt Password
+#### 2. Encrypt Password
+
+```powershell
+.\scripts\datamasker.ps1 -Action EncryptPassword
+Enter SQL Server password: MySecretPassword123
+SUCCESS: Password encrypted and saved to 'secrets\sql-password.dpapi'
+```
+
+#### 3. Run Full Workflow (with confirmation)
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json"
+```
+
+#### 4. Run Full Workflow (no prompts)
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json" -NoConfirm
+```
+
+#### 5. Dry Run First
+
+```powershell
+.\scripts\datamasker.ps1 -Action FullRun -Config ".\sample.masking.json" -Connection ".\sample.connection.json" -DryRun
+```
+
+### Using Python CLI Directly
+
+#### 1. Set Up Environment
+
+```cmd
+git clone <repository>
+cd datamasker
+python -m venv venv
+venv\Scripts\activate
+pip install pyodbc pytest
+```
+
+#### 2. Create Secrets Directory and Encrypt Password
 
 ```cmd
 mkdir secrets
@@ -446,7 +687,7 @@ Enter SQL Server password: MySecretPassword123
 SUCCESS: Password encrypted and saved to 'secrets\sql-password.dpapi'
 ```
 
-### 3. Create Functional Configuration
+#### 3. Create Functional Configuration
 
 Create `config.masking.json`:
 
@@ -473,20 +714,20 @@ Create `config.masking.json`:
 }
 ```
 
-### 4. Create Technical Configuration
+#### 4. Create Technical Configuration
 
 Create `config.connection.json`:
 
 ```json
 {
   "server": "SQL01",
-  "database": "MyDb",
   "username": "masking_user",
-  "passwordFile": "secrets/sql-password.dpapi"
+  "passwordFile": "secrets/sql-password.dpapi",
+  "databases": ["MyDb", "MyDb2", "MyDb3"]
 }
 ```
 
-### 5. Generate Masking Script
+#### 5. Generate Masking Script
 
 ```cmd
 python -m app.cli generate --config config.masking.json --connection config.connection.json --output masking.sql
@@ -494,7 +735,7 @@ SUCCESS: masking.sql generated at 'masking.sql'
 NOTE: Review the generated SQL script before executing it manually.
 ```
 
-### 6. Review the Generated Script
+#### 6. Review the Generated Script
 
 ```cmd
 type masking.sql
@@ -506,7 +747,7 @@ Verify:
 - No unintended changes
 - Comments match expectations
 
-### 7. Execute Manually
+#### 7. Execute Manually
 
 ```cmd
 sqlcmd -S SQL01 -d MyDb -U masking_user -i masking.sql
@@ -515,7 +756,7 @@ Password: MySecretPassword123
 (affected rows displayed)
 ```
 
-### 8. Verify Masking Applied
+#### 8. Verify Masking Applied
 
 ```cmd
 sqlcmd -S SQL01 -d MyDb -U masking_user -Q "SELECT TOP 10 LastName FROM dbo.Personnel"
@@ -540,6 +781,7 @@ LastName
 | Secrets in git | `secrets/` directory in `.gitignore` |
 | NTFS protection | README documents required ACLs |
 | SQL injection | Generated SQL uses parameterized patterns |
+| SQL execution | Separated from generation; requires explicit action |
 
 ## Troubleshooting
 
@@ -570,3 +812,14 @@ Install dependencies:
 ```cmd
 pip install pyodbc
 ```
+
+### PowerShell script fails with "cannot be loaded because running scripts is disabled"
+
+Use `-ExecutionPolicy Bypass` when invoking PowerShell:
+```cmd
+powershell.exe -ExecutionPolicy Bypass -File ".\scripts\datamasker.ps1" -Action EncryptPassword
+```
+
+### sqlcmd is not recognized
+
+Ensure SQL Server command-line tools are installed and `sqlcmd` is available in PATH. You can download the [SQL Server command-line tools](https://docs.microsoft.com/en-us/sql/tools/sqlcmd-utility) if needed.
