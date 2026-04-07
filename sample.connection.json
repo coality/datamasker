@@ -1,6 +1,6 @@
 {
   "server": "SQL01",
-  "database": "MyDb",
   "username": "masking_user",
-  "passwordFile": "secrets/sql-password.dpapi"
+  "passwordFile": "secrets/sql-password.dpapi",
+  "databases": ["MyDb", "MyDb2", "MyDb3"]
 }

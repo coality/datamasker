@@ -2,7 +2,13 @@
 
 import pytest
 
-from app.models import FunctionalConfig, MaskingRule, ConnectionConfig
+from app.models import (
+    FunctionalConfig,
+    MaskingRule,
+    ConnectionConfig,
+    DatabaseConfig,
+    ServerConfig,
+)
 
 
 class TestMaskingRule:
@@ -108,23 +114,27 @@ class TestConnectionConfig:
     def test_connection_config_creation(self):
         """Test creating a ConnectionConfig instance."""
         config = ConnectionConfig(
-            server="SQL01",
-            database="MyDb",
-            username="masking_user",
-            password_file="secrets/sql-password.dpapi",
+            server_config=ServerConfig(
+                server="SQL01",
+                username="masking_user",
+                password_file="secrets/sql-password.dpapi",
+            ),
+            databases=[DatabaseConfig(name="MyDb")],
         )
-        assert config.server == "SQL01"
-        assert config.database == "MyDb"
-        assert config.username == "masking_user"
-        assert config.password_file == "secrets/sql-password.dpapi"
+        assert config.server_config.server == "SQL01"
+        assert config.databases[0].name == "MyDb"
+        assert config.server_config.username == "masking_user"
+        assert config.server_config.password_file == "secrets/sql-password.dpapi"
 
     def test_connection_config_password_file_path(self):
         """Test password_file_path property returns PurePath."""
         config = ConnectionConfig(
-            server="SQL01",
-            database="MyDb",
-            username="masking_user",
-            password_file="secrets/sql-password.dpapi",
+            server_config=ServerConfig(
+                server="SQL01",
+                username="masking_user",
+                password_file="secrets/sql-password.dpapi",
+            ),
+            databases=[DatabaseConfig(name="MyDb")],
         )
         from pathlib import PurePath
 
@@ -135,24 +145,45 @@ class TestConnectionConfig:
     def test_connection_config_is_frozen(self):
         """Test that ConnectionConfig is immutable (frozen)."""
         config = ConnectionConfig(
-            server="SQL01",
-            database="MyDb",
-            username="masking_user",
-            password_file="secrets/sql-password.dpapi",
+            server_config=ServerConfig(
+                server="SQL01",
+                username="masking_user",
+                password_file="secrets/sql-password.dpapi",
+            ),
+            databases=[DatabaseConfig(name="MyDb")],
         )
         with pytest.raises(AttributeError):
-            config.server = "OtherServer"
+            config.server_config = ServerConfig(
+                server="OtherServer",
+                username="user",
+                password_file="other.dpapi",
+            )
 
     def test_connection_config_equality(self):
         """Test ConnectionConfig equality comparison."""
         config1 = ConnectionConfig(
-            server="SQL01", database="MyDb", username="user", password_file="path.dpapi"
+            server_config=ServerConfig(
+                server="SQL01",
+                username="user",
+                password_file="path.dpapi",
+            ),
+            databases=[DatabaseConfig(name="MyDb")],
         )
         config2 = ConnectionConfig(
-            server="SQL01", database="MyDb", username="user", password_file="path.dpapi"
+            server_config=ServerConfig(
+                server="SQL01",
+                username="user",
+                password_file="path.dpapi",
+            ),
+            databases=[DatabaseConfig(name="MyDb")],
         )
         config3 = ConnectionConfig(
-            server="SQL02", database="MyDb", username="user", password_file="path.dpapi"
+            server_config=ServerConfig(
+                server="SQL02",
+                username="user",
+                password_file="path.dpapi",
+            ),
+            databases=[DatabaseConfig(name="MyDb")],
         )
 
         assert config1 == config2

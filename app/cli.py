@@ -170,45 +170,67 @@ def handle_generate(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        password = _decrypt_password(secret_store, connection_config.password_file)
+        password = _decrypt_password(
+            secret_store, connection_config.server_config.password_file
+        )
     except SecretError as e:
         print("ERROR reading encrypted password: {}".format(e.message), file=sys.stderr)
         return 1
 
-    connection_string = _build_connection_string(connection_config, password)
+    all_sql_parts: List[str] = []
 
-    try:
-        metadata = SQLServerMetadata(connection_string)
-        validator = Validator(metadata)
+    for db_config in connection_config.databases:
+        connection_string = _build_connection_string(
+            connection_config.server_config.server,
+            db_config.name,
+            connection_config.server_config.username,
+            password,
+        )
 
-        validation_errors = validator.validate(functional_config)
+        try:
+            metadata = SQLServerMetadata(connection_string)
+            validator = Validator(metadata)
 
-        if validation_errors:
+            validation_errors = validator.validate(functional_config)
+
+            if validation_errors:
+                print(
+                    "ERROR: Validation failed for database '{}'. The following rules cannot be processed:".format(
+                        db_config.name
+                    ),
+                    file=sys.stderr,
+                )
+                for error in validation_errors:
+                    print("  - {}".format(error.message), file=sys.stderr)
+                print("\nNo masking.sql file has been generated.", file=sys.stderr)
+                return 1
+
+        except DatamaskerError as e:
             print(
-                "ERROR: Validation failed. The following rules cannot be processed:",
+                "ERROR during validation for database '{}': {}".format(
+                    db_config.name, e.message
+                ),
                 file=sys.stderr,
             )
-            for error in validation_errors:
-                print("  - {}".format(error.message), file=sys.stderr)
-            print("\nNo masking.sql file has been generated.", file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(
+                "ERROR: Unexpected error during validation for database '{}': {}".format(
+                    db_config.name, str(e)
+                ),
+                file=sys.stderr,
+            )
             return 1
 
-    except DatamaskerError as e:
-        print("ERROR during validation: {}".format(e.message), file=sys.stderr)
-        return 1
-    except Exception as e:
-        print(
-            "ERROR: Unexpected error during validation: {}".format(str(e)),
-            file=sys.stderr,
-        )
-        return 1
+        generator = SQLGenerator()
+        sql_script = generator.generate(functional_config, db_config.name)
+        all_sql_parts.append(sql_script)
 
     try:
-        generator = SQLGenerator()
-        sql_script = generator.generate(functional_config)
+        final_sql = "\n\n".join(all_sql_parts)
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(sql_script, encoding="utf-8")
+        args.output.write_text(final_sql, encoding="utf-8")
 
         print("SUCCESS: masking.sql generated at '{}'".format(args.output))
         print("NOTE: Review the generated SQL script before executing it manually.")
@@ -250,12 +272,26 @@ def handle_test_connection(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        password = _decrypt_password(secret_store, connection_config.password_file)
+        password = _decrypt_password(
+            secret_store, connection_config.server_config.password_file
+        )
     except SecretError as e:
         print("ERROR reading encrypted password: {}".format(e.message), file=sys.stderr)
         return 1
 
-    connection_string = _build_connection_string(connection_config, password)
+    if not connection_config.databases:
+        print(
+            "ERROR: No databases defined in connection configuration.", file=sys.stderr
+        )
+        return 1
+
+    first_db = connection_config.databases[0].name
+    connection_string = _build_connection_string(
+        connection_config.server_config.server,
+        first_db,
+        connection_config.server_config.username,
+        password,
+    )
 
     try:
         metadata = SQLServerMetadata(connection_string)
@@ -263,7 +299,7 @@ def handle_test_connection(args: argparse.Namespace) -> int:
         conn.close()
         print(
             "SUCCESS: Connected to SQL Server '{}' (database: '{}')".format(
-                connection_config.server, connection_config.database
+                connection_config.server_config.server, first_db
             )
         )
         return 0
@@ -292,11 +328,15 @@ def _decrypt_password(secret_store: SecretStore, password_file: str) -> str:
     return secret_store.decrypt_password(password_path)
 
 
-def _build_connection_string(config: ConnectionConfig, password: str) -> str:
+def _build_connection_string(
+    server: str, database: str, username: str, password: str
+) -> str:
     """Build an ODBC connection string from configuration.
 
     Args:
-        config: The connection configuration.
+        server: The SQL Server hostname.
+        database: The database name.
+        username: The username.
         password: The decrypted SQL Server password.
 
     Returns:
@@ -304,9 +344,9 @@ def _build_connection_string(config: ConnectionConfig, password: str) -> str:
     """
     parts = [
         "DRIVER={ODBC Driver 17 for SQL Server}",
-        "SERVER={}".format(config.server),
-        "DATABASE={}".format(config.database),
-        "UID={}".format(config.username),
+        "SERVER={}".format(server),
+        "DATABASE={}".format(database),
+        "UID={}".format(username),
         "PWD={}".format(password),
     ]
     return ";".join(parts)

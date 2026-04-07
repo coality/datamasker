@@ -2,16 +2,17 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.exceptions import ConfigurationError
-from app.models import ConnectionConfig
+from app.models import ConnectionConfig, DatabaseConfig, ServerConfig
 
 
 class ConnectionLoader:
     """Loads and validates the technical/connection configuration."""
 
-    REQUIRED_FIELDS = frozenset({"server", "database", "username", "passwordFile"})
+    SERVER_FIELDS = frozenset({"server", "username", "passwordFile"})
+    REQUIRED_FIELDS = SERVER_FIELDS | {"databases"}
 
     def load(self, config_path: Path) -> ConnectionConfig:
         """Load and parse a connection configuration file.
@@ -80,12 +81,6 @@ class ConnectionLoader:
                 "server in {} must be a non-empty string".format(source)
             )
 
-        database = data.get("database")
-        if not isinstance(database, str) or not database:
-            raise ConfigurationError(
-                "database in {} must be a non-empty string".format(source)
-            )
-
         username = data.get("username")
         if not isinstance(username, str) or not username:
             raise ConfigurationError(
@@ -98,9 +93,29 @@ class ConnectionLoader:
                 "passwordFile in {} must be a non-empty string".format(source)
             )
 
-        return ConnectionConfig(
+        databases = data.get("databases")
+        if not isinstance(databases, list) or not databases:
+            raise ConfigurationError(
+                "databases in {} must be a non-empty list".format(source)
+            )
+
+        db_configs: List[DatabaseConfig] = []
+        for i, db in enumerate(databases):
+            if not isinstance(db, str) or not db:
+                raise ConfigurationError(
+                    "databases entry at index {} in {} must be a non-empty string".format(
+                        i, source
+                    )
+                )
+            db_configs.append(DatabaseConfig(name=db))
+
+        server_config = ServerConfig(
             server=server,
-            database=database,
             username=username,
             password_file=password_file,
+        )
+
+        return ConnectionConfig(
+            server_config=server_config,
+            databases=db_configs,
         )

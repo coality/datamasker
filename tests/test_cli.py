@@ -73,15 +73,9 @@ class TestBuildConnectionString:
 
     def test_build_connection_string(self):
         """Test building a connection string."""
-        config = ConnectionConfig(
-            server="SQL01",
-            database="MyDb",
-            username="masking_user",
-            password_file="secrets/sql-password.dpapi",
-        )
         password = "MySecretPassword"
 
-        result = _build_connection_string(config, password)
+        result = _build_connection_string("SQL01", "MyDb", "masking_user", password)
 
         assert "DRIVER={ODBC Driver 17 for SQL Server}" in result
         assert "SERVER=SQL01" in result
@@ -92,15 +86,9 @@ class TestBuildConnectionString:
 
     def test_connection_string_password_not_in_logs(self):
         """Test that password in connection string won't appear in error messages by default."""
-        config = ConnectionConfig(
-            server="SQL01",
-            database="MyDb",
-            username="masking_user",
-            password_file="secrets/sql-password.dpapi",
-        )
         password = "SuperSecret123"
 
-        result = _build_connection_string(config, password)
+        result = _build_connection_string("SQL01", "MyDb", "masking_user", password)
 
         assert "SuperSecret123" in result
         assert "PWD=SuperSecret123" in result
@@ -205,6 +193,8 @@ class TestHandleGenerate:
 
     def test_handling_validation_errors(self):
         """Test handling of validation errors."""
+        from app.models import ServerConfig, DatabaseConfig
+
         with (
             patch("app.cli.ConfigLoader") as mock_config_loader,
             patch("app.cli.ConnectionLoader") as mock_conn_loader,
@@ -213,11 +203,14 @@ class TestHandleGenerate:
             patch("app.cli.Validator") as mock_validator,
         ):
             functional_config = MagicMock(spec=FunctionalConfig)
-            connection_config = MagicMock(spec=ConnectionConfig)
-            connection_config.server = "SQL01"
-            connection_config.database = "MyDb"
-            connection_config.username = "masking_user"
-            connection_config.password_file = "secrets/sql-password.dpapi"
+            connection_config = ConnectionConfig(
+                server_config=ServerConfig(
+                    server="SQL01",
+                    username="masking_user",
+                    password_file="secrets/sql-password.dpapi",
+                ),
+                databases=[DatabaseConfig(name="MyDb")],
+            )
 
             mock_config_loader.return_value.load.return_value = functional_config
             mock_conn_loader.return_value.load.return_value = connection_config
@@ -330,6 +323,8 @@ class TestCLIExitCodes:
 
     def test_generate_returns_0_on_success(self):
         """Test generate returns 0 on success (mocked)."""
+        from app.models import ServerConfig, DatabaseConfig
+
         with (
             patch("app.cli.ConfigLoader") as mock_config_loader,
             patch("app.cli.ConnectionLoader") as mock_conn_loader,
@@ -341,11 +336,14 @@ class TestCLIExitCodes:
             patch("pathlib.Path.write_text") as mock_write_text,
         ):
             functional_config = MagicMock(spec=FunctionalConfig)
-            connection_config = MagicMock(spec=ConnectionConfig)
-            connection_config.server = "SQL01"
-            connection_config.database = "MyDb"
-            connection_config.username = "masking_user"
-            connection_config.password_file = "secrets/sql-password.dpapi"
+            connection_config = ConnectionConfig(
+                server_config=ServerConfig(
+                    server="SQL01",
+                    username="masking_user",
+                    password_file="secrets/sql-password.dpapi",
+                ),
+                databases=[DatabaseConfig(name="MyDb")],
+            )
 
             mock_config_loader.return_value.load.return_value = functional_config
             mock_conn_loader.return_value.load.return_value = connection_config

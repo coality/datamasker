@@ -29,17 +29,31 @@ class FunctionalConfig:
 
 
 @dataclass(frozen=True)
+class DatabaseConfig:
+    """Represents a single database configuration."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class ServerConfig:
+    """Represents shared server authentication configuration."""
+
+    server: str
+    username: str
+    password_file: str
+
+
+@dataclass(frozen=True)
 class ConnectionConfig:
     """Represents the technical/connection configuration file."""
 
-    server: str
-    database: str
-    username: str
-    password_file: str
+    server_config: ServerConfig
+    databases: List[DatabaseConfig]
 
     @property
     def password_file_path(self) -> "PurePath":
         """Return the password file as a path."""
         from pathlib import PurePath
 
-        return PurePath(self.password_file)
+        return PurePath(self.server_config.password_file)
