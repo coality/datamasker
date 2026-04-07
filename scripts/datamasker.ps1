@@ -119,9 +119,9 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, HelpMessage = "Action to perform: EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun")]
+    [Parameter(HelpMessage = "Action to perform: EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun")]
     [ValidateSet("EncryptPassword", "TestConnection", "GenerateSql", "ExecuteSql", "FullRun")]
-    [string]$Action,
+    [string]$Action = $null,
 
     [Parameter(HelpMessage = "Path to functional masking configuration JSON file")]
     [string]$Config,
@@ -130,26 +130,48 @@ param(
     [string]$Connection,
 
     [Parameter(HelpMessage = "Path for generated SQL masking script (default: .\masking.sql)")]
-    [string]$SqlFile = ".\masking.sql",
+    [string]$SqlFile = $null,
 
     [Parameter(HelpMessage = "Datamasker project root directory (default: script parent directory)")]
-    [string]$ProjectRoot,
+    [string]$ProjectRoot = $null,
 
     [Parameter(HelpMessage = "Python executable path (default: .\.venv\Scripts\python.exe relative to ProjectRoot)")]
-    [string]$PythonExe,
+    [string]$PythonExe = $null,
 
     [Parameter(HelpMessage = "Suppress confirmation prompts for automation")]
-    [switch]$NoConfirm,
+    [switch]$NoConfirm = $false,
 
     [Parameter(HelpMessage = "Validate but skip actual SQL execution")]
-    [switch]$DryRun,
+    [switch]$DryRun = $false,
 
     [Parameter(HelpMessage = "Optional log file path")]
-    [string]$LogFile
+    [string]$LogFile = $null
 )
+
+#region User Configuration Section
+$DefaultAction = ""           # EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun
+$DefaultConfig = ""           # Path to functional masking configuration JSON file
+$DefaultConnection = ""       # Path to technical connection configuration JSON file
+$DefaultSqlFile = ""          # Path for generated SQL masking script
+$DefaultProjectRoot = ""      # Root directory of Datamasker project (default: script parent dir)
+$DefaultPythonExe = ""        # Python executable path
+$DefaultNoConfirm = $false    # Suppress confirmation prompts
+$DefaultDryRun = $false       # Validate but skip SQL execution
+$DefaultLogFile = ""          # Optional log file path
+#endregion
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 5.1
+
+if (-not $Action) { $Action = $DefaultAction }
+if (-not $Config) { $Config = $DefaultConfig }
+if (-not $Connection) { $Connection = $DefaultConnection }
+if (-not $SqlFile) { $SqlFile = if ($DefaultSqlFile) { $DefaultSqlFile } else { ".\masking.sql" } }
+if (-not $ProjectRoot) { $ProjectRoot = $DefaultProjectRoot }
+if (-not $PythonExe) { $PythonExe = $DefaultPythonExe }
+if (-not $NoConfirm) { $NoConfirm = $DefaultNoConfirm }
+if (-not $DryRun) { $DryRun = $DefaultDryRun }
+if (-not $LogFile) { $LogFile = $DefaultLogFile }
 
 function Write-LogMessage {
     param(
