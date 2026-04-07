@@ -92,7 +92,7 @@
 
 .NOTES
     File Name: datamasker.ps1
-    Author:   Datamasker Contributors
+    Author:   Jerome COLLETTE
     Version:  1.0.0
 
     SECURITY NOTES:
