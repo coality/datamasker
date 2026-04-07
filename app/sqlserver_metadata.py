@@ -260,6 +260,101 @@ class SQLServerMetadata:
         """
         return self._execute_list(query, (schema, table), cursor)
 
+    def get_column_max_length(
+        self,
+        schema: str,
+        table: str,
+        column: str,
+        cursor: Optional[pyodbc.Cursor] = None,
+    ) -> Optional[int]:
+        """Get the max_length of a column.
+
+        Args:
+            schema: Schema name.
+            table: Table name.
+            column: Column name.
+            cursor: Optional existing cursor to use.
+
+        Returns:
+            The max_length in bytes, or None if the column doesn't exist or has no length limit.
+        """
+        query = """
+            SELECT c.max_length
+            FROM sys.columns c
+            INNER JOIN sys.tables t ON c.object_id = t.object_id
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = ? AND t.name = ? AND c.name = ?
+        """
+        own_connection = cursor is None
+        conn = None
+        cur = None
+        try:
+            if own_connection:
+                conn = self._connect()
+                cur = conn.cursor()
+            else:
+                cur = cursor
+
+            cur.execute(query, (schema, table, column))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return row[0]
+        finally:
+            if own_connection:
+                if cur:
+                    cur.close()
+                if conn:
+                    conn.close()
+
+    def get_column_type(
+        self,
+        schema: str,
+        table: str,
+        column: str,
+        cursor: Optional[pyodbc.Cursor] = None,
+    ) -> Optional[str]:
+        """Get the data type name of a column.
+
+        Args:
+            schema: Schema name.
+            table: Table name.
+            column: Column name.
+            cursor: Optional existing cursor to use.
+
+        Returns:
+            The data type name (e.g., 'varchar', 'nvarchar', 'char'), or None if not found.
+        """
+        query = """
+            SELECT tp.name
+            FROM sys.columns c
+            INNER JOIN sys.tables t ON c.object_id = t.object_id
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            INNER JOIN sys.types tp ON c.user_type_id = tp.user_type_id
+            WHERE s.name = ? AND t.name = ? AND c.name = ?
+        """
+        own_connection = cursor is None
+        conn = None
+        cur = None
+        try:
+            if own_connection:
+                conn = self._connect()
+                cur = conn.cursor()
+            else:
+                cur = cursor
+
+            cur.execute(query, (schema, table, column))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return row[0]
+        finally:
+            if own_connection:
+                if cur:
+                    cur.close()
+                if conn:
+                    conn.close()
+
     def _execute_exists(
         self,
         query: str,

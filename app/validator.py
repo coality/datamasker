@@ -1,6 +1,6 @@
 """Validator for masking rules against SQL Server metadata."""
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from app.exceptions import ValidationError
 from app.models import FunctionalConfig, MaskingRule
@@ -37,7 +37,7 @@ class Validator:
         processed_rules: List[Tuple[str, str, str]] = []
 
         for rule in config.masking_rules:
-            rule_errors = self._validate_rule(rule, processed_rules)
+            rule_errors = self._validate_rule(rule, processed_rules, config)
             errors.extend(rule_errors)
             processed_rules.append((rule.schema, rule.table, rule.column))
 
@@ -46,13 +46,17 @@ class Validator:
         return []
 
     def _validate_rule(
-        self, rule: MaskingRule, processed_rules: List[Tuple[str, str, str]]
+        self,
+        rule: MaskingRule,
+        processed_rules: List[Tuple[str, str, str]],
+        config: FunctionalConfig,
     ) -> List[ValidationError]:
         """Validate a single masking rule.
 
         Args:
             rule: The masking rule to validate.
             processed_rules: List of already-processed (schema, table, column) tuples.
+            config: The functional configuration containing masking format and pad_length.
 
         Returns:
             List of validation errors for this rule.
@@ -96,6 +100,10 @@ class Validator:
                 )
             )
             return errors
+
+        length_error = self._validate_masked_value_length(rule, config)
+        if length_error:
+            errors.append(length_error)
 
         if self._metadata.is_primary_key(rule.schema, rule.table, rule.column):
             errors.append(
@@ -143,3 +151,61 @@ class Validator:
             )
 
         return errors
+
+    def _validate_masked_value_length(
+        self, rule: MaskingRule, config: FunctionalConfig
+    ) -> Optional[ValidationError]:
+        """Validate that the masked value fits within the column's max length.
+
+        Args:
+            rule: The masking rule to validate.
+            config: The functional configuration containing masking format and pad_length.
+
+        Returns:
+            A ValidationError if the masked value exceeds the column length, None otherwise.
+        """
+        max_length = self._metadata.get_column_max_length(
+            rule.schema, rule.table, rule.column
+        )
+        if max_length is None:
+            return ValidationError(
+                "Could not determine max length for column '{}.{}.{}'".format(
+                    rule.schema, rule.table, rule.column
+                )
+            )
+
+        column_type = self._metadata.get_column_type(
+            rule.schema, rule.table, rule.column
+        )
+        if column_type is None:
+            return ValidationError(
+                "Could not determine data type for column '{}.{}.{}'".format(
+                    rule.schema, rule.table, rule.column
+                )
+            )
+
+        max_counter = "0" * config.pad_length
+        masked_value_template = config.masking_format.replace(
+            "{column}", rule.column.upper()
+        ).replace("{counter}", max_counter)
+
+        masked_value_length = len(masked_value_template)
+
+        if column_type.lower() in ("nvarchar", "nchar", "ntext"):
+            effective_max_length = max_length // 2
+        else:
+            effective_max_length = max_length
+
+        if masked_value_length > effective_max_length:
+            return ValidationError(
+                "Masked value length ({}) exceeds column '{}.{}.{}' max length ({}) for data type '{}'".format(
+                    masked_value_length,
+                    rule.schema,
+                    rule.table,
+                    rule.column,
+                    effective_max_length,
+                    column_type,
+                )
+            )
+
+        return None

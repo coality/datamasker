@@ -11,8 +11,9 @@ from app.exceptions import ValidationError
 class MockMetadata:
     """Mock SQLServerMetadata for testing Validator without real database."""
 
-    def __init__(self, exists_data=None):
+    def __init__(self, exists_data=None, column_data=None):
         self._exists_data = exists_data or {}
+        self._column_data = column_data or {}
         self._calls = []
 
     def schema_exists(self, schema, cursor=None):
@@ -50,6 +51,20 @@ class MockMetadata:
         return self._exists_data.get("fk_target", {}).get(
             (schema, table, column), False
         )
+
+    def get_column_max_length(self, schema, table, column, cursor=None):
+        self._calls.append(("get_column_max_length", schema, table, column))
+        key = (schema, table, column)
+        if key in self._column_data:
+            return self._column_data[key].get("max_length", 50)
+        return 50
+
+    def get_column_type(self, schema, table, column, cursor=None):
+        self._calls.append(("get_column_type", schema, table, column))
+        key = (schema, table, column)
+        if key in self._column_data:
+            return self._column_data[key].get("type", "varchar")
+        return "varchar"
 
 
 class TestValidatorValid:
@@ -500,3 +515,180 @@ class TestValidatorReturnsListNotRaises:
 
         assert isinstance(result, list)
         assert len(result) == 1
+
+
+class TestValidatorMaskedValueLength:
+    """Tests for masked value length validation."""
+
+    def test_masked_value_fits_in_column(self):
+        """Test validation passes when masked value fits in column."""
+        metadata = MockMetadata(
+            {
+                "schema": {"dbo": True},
+                "table": {("dbo", "Personnel"): True},
+                "column": {
+                    ("dbo", "Personnel", "LastName"): True,
+                    ("dbo", "Personnel", "PersonID"): True,
+                },
+            },
+            {
+                ("dbo", "Personnel", "LastName"): {
+                    "max_length": 50,
+                    "type": "varchar",
+                },
+            },
+        )
+
+        rules = [
+            MaskingRule(
+                schema="dbo", table="Personnel", column="LastName", order_by="PersonID"
+            )
+        ]
+        config = FunctionalConfig(
+            masking_format="<{column}_{counter}>", pad_length=4, masking_rules=rules
+        )
+
+        validator = Validator(metadata)
+        errors = validator.validate(config)
+
+        assert len(errors) == 0
+
+    def test_masked_value_exceeds_varchar_column(self):
+        """Test validation fails when masked value exceeds varchar column length."""
+        metadata = MockMetadata(
+            {
+                "schema": {"dbo": True},
+                "table": {("dbo", "Personnel"): True},
+                "column": {
+                    ("dbo", "Personnel", "LastName"): True,
+                    ("dbo", "Personnel", "PersonID"): True,
+                },
+            },
+            {
+                ("dbo", "Personnel", "LastName"): {
+                    "max_length": 10,
+                    "type": "varchar",
+                },
+            },
+        )
+
+        rules = [
+            MaskingRule(
+                schema="dbo", table="Personnel", column="LastName", order_by="PersonID"
+            )
+        ]
+        config = FunctionalConfig(
+            masking_format="<{column}_{counter}>", pad_length=4, masking_rules=rules
+        )
+
+        validator = Validator(metadata)
+        errors = validator.validate(config)
+
+        assert len(errors) == 1
+        assert "exceeds" in errors[0].message
+        assert "max length" in errors[0].message
+
+    def test_masked_value_exceeds_nvarchar_column(self):
+        """Test validation fails when masked value exceeds nvarchar column length."""
+        metadata = MockMetadata(
+            {
+                "schema": {"dbo": True},
+                "table": {("dbo", "Personnel"): True},
+                "column": {
+                    ("dbo", "Personnel", "LastName"): True,
+                    ("dbo", "Personnel", "PersonID"): True,
+                },
+            },
+            {
+                ("dbo", "Personnel", "LastName"): {
+                    "max_length": 20,
+                    "type": "nvarchar",
+                },
+            },
+        )
+
+        rules = [
+            MaskingRule(
+                schema="dbo", table="Personnel", column="LastName", order_by="PersonID"
+            )
+        ]
+        config = FunctionalConfig(
+            masking_format="<{column}_{counter}>", pad_length=4, masking_rules=rules
+        )
+
+        validator = Validator(metadata)
+        errors = validator.validate(config)
+
+        assert len(errors) == 1
+        assert "exceeds" in errors[0].message
+        assert "nvarchar" in errors[0].message
+
+    def test_length_calculation_with_long_column_name(self):
+        """Test validation fails when column name makes masked value too long."""
+        metadata = MockMetadata(
+            {
+                "schema": {"dbo": True},
+                "table": {("dbo", "VeryLongTableName"): True},
+                "column": {
+                    ("dbo", "VeryLongTableName", "VeryLongColumnName"): True,
+                    ("dbo", "VeryLongTableName", "ID"): True,
+                },
+            },
+            {
+                ("dbo", "VeryLongTableName", "VeryLongColumnName"): {
+                    "max_length": 20,
+                    "type": "varchar",
+                },
+            },
+        )
+
+        rules = [
+            MaskingRule(
+                schema="dbo",
+                table="VeryLongTableName",
+                column="VeryLongColumnName",
+                order_by="ID",
+            )
+        ]
+        config = FunctionalConfig(
+            masking_format="<{column}_{counter}>", pad_length=4, masking_rules=rules
+        )
+
+        validator = Validator(metadata)
+        errors = validator.validate(config)
+
+        assert len(errors) == 1
+        assert "exceeds" in errors[0].message
+
+    def test_nvarchaR_correct_length_handling(self):
+        """Test that nvarchar columns correctly divide max_length by 2."""
+        metadata = MockMetadata(
+            {
+                "schema": {"dbo": True},
+                "table": {("dbo", "Personnel"): True},
+                "column": {
+                    ("dbo", "Personnel", "Name"): True,
+                    ("dbo", "Personnel", "PersonID"): True,
+                },
+            },
+            {
+                ("dbo", "Personnel", "Name"): {
+                    "max_length": 40,
+                    "type": "nvarchar",
+                },
+            },
+        )
+
+        rules = [
+            MaskingRule(
+                schema="dbo", table="Personnel", column="Name", order_by="PersonID"
+            )
+        ]
+        config = FunctionalConfig(
+            masking_format="<{column}_{counter}>", pad_length=4, masking_rules=rules
+        )
+
+        validator = Validator(metadata)
+        errors = validator.validate(config)
+
+        assert len(errors) == 0

@@ -422,3 +422,81 @@ class TestSQLServerMetadataGetTablePrimaryKeyColumns:
             result = metadata.get_table_primary_key_columns("dbo", "LogTable")
 
             assert result == []
+
+
+class TestSQLServerMetadataGetColumnMaxLength:
+    """Tests for get_column_max_length method."""
+
+    def test_get_column_max_length_returns_value(self):
+        """Test get_column_max_length returns the column max_length."""
+        conn_str = (
+            "DRIVER={ODBC Driver 17};SERVER=SQL01;DATABASE=MyDb;UID=user;PWD=pass"
+        )
+        metadata = SQLServerMetadata(conn_str)
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (50,)
+        mock_connection = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor
+
+        with patch.object(metadata, "_connect", return_value=mock_connection):
+            result = metadata.get_column_max_length("dbo", "Personnel", "LastName")
+
+            assert result == 50
+            mock_cursor.execute.assert_called_once()
+
+    def test_get_column_max_length_returns_none_when_not_found(self):
+        """Test get_column_max_length returns None when column doesn't exist."""
+        conn_str = (
+            "DRIVER={ODBC Driver 17};SERVER=SQL01;DATABASE=MyDb;UID=user;PWD=pass"
+        )
+        metadata = SQLServerMetadata(conn_str)
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None
+        mock_connection = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor
+
+        with patch.object(metadata, "_connect", return_value=mock_connection):
+            result = metadata.get_column_max_length("dbo", "Personnel", "NonExistent")
+
+            assert result is None
+
+
+class TestSQLServerMetadataGetColumnType:
+    """Tests for get_column_type method."""
+
+    def test_get_column_type_returns_value(self):
+        """Test get_column_type returns the column data type."""
+        conn_str = (
+            "DRIVER={ODBC Driver 17};SERVER=SQL01;DATABASE=MyDb;UID=user;PWD=pass"
+        )
+        metadata = SQLServerMetadata(conn_str)
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = ("nvarchar",)
+        mock_connection = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor
+
+        with patch.object(metadata, "_connect", return_value=mock_connection):
+            result = metadata.get_column_type("dbo", "Personnel", "LastName")
+
+            assert result == "nvarchar"
+            mock_cursor.execute.assert_called_once()
+
+    def test_get_column_type_returns_none_when_not_found(self):
+        """Test get_column_type returns None when column doesn't exist."""
+        conn_str = (
+            "DRIVER={ODBC Driver 17};SERVER=SQL01;DATABASE=MyDb;UID=user;PWD=pass"
+        )
+        metadata = SQLServerMetadata(conn_str)
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None
+        mock_connection = MagicMock()
+        mock_connection.cursor.return_value = mock_cursor
+
+        with patch.object(metadata, "_connect", return_value=mock_connection):
+            result = metadata.get_column_type("dbo", "Personnel", "NonExistent")
+
+            assert result is None
