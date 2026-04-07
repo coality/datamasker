@@ -216,10 +216,18 @@ Interactive: Prompts for password without echo.
 python -m app.cli generate --config sample.masking.json --connection sample.connection.json --output masking.sql
 ```
 
+### Test Connection
+
+```cmd
+python -m app.cli test-connection --connection sample.connection.json
+```
+
+Verifies connectivity to the SQL Server without generating any SQL script. Useful to validate credentials and network connectivity before running `generate`.
+
 ### All Options
 
 ```
-datamasker [-h] {encrypt-password,generate}
+datamasker [-h] {encrypt-password,generate,test-connection}
 
 encrypt-password:
   --output, -o    Output file for encrypted password
@@ -228,6 +236,9 @@ generate:
   --config, -c    Functional configuration JSON file
   --connection, -cn  Technical configuration JSON file
   --output, -o    Output path for generated SQL script
+
+test-connection:
+  --connection, -cn  Technical configuration JSON file
 ```
 
 ## Example Generation Command
