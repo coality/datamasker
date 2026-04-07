@@ -1,0 +1,20 @@
+{
+  "global": {
+    "maskingFormat": "<{column}_{counter}>",
+    "padLength": 4
+  },
+  "maskingRules": [
+    {
+      "schema": "dbo",
+      "table": "Personnel",
+      "column": "LastName",
+      "orderBy": "PersonID"
+    },
+    {
+      "schema": "dbo",
+      "table": "Personnel",
+      "column": "FirstName",
+      "orderBy": "PersonID"
+    }
+  ]
+}
