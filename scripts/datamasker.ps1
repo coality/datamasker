@@ -149,15 +149,15 @@ param(
 )
 
 #region User Configuration Section
-$DefaultAction = ""           # EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun
-$DefaultConfig = ""           # Path to functional masking configuration JSON file
-$DefaultConnection = ""       # Path to technical connection configuration JSON file
-$DefaultSqlFile = ""          # Path for generated SQL masking script
-$DefaultProjectRoot = ""      # Root directory of Datamasker project (default: script parent dir)
-$DefaultPythonExe = ""        # Python executable path
-$DefaultNoConfirm = $false    # Suppress confirmation prompts
-$DefaultDryRun = $false       # Validate but skip SQL execution
-$DefaultLogFile = ""          # Optional log file path
+$DefaultAction = "FullRun"                                                     # EncryptPassword, TestConnection, GenerateSql, ExecuteSql, FullRun
+$DefaultConfig = "sample.masking.json"                                         # Path to functional masking configuration JSON file
+$DefaultConnection = "sample.connection.json"                                  # Path to technical connection configuration JSON file
+$DefaultSqlFile = "masking.sql"                                                # Path for generated SQL masking script
+$DefaultProjectRoot = ""                                                       # Root directory of Datamasker project (default: script parent dir)
+$DefaultPythonExe = ""                                                         # Python executable path
+$DefaultNoConfirm = $false                                                     # Suppress confirmation prompts
+$DefaultDryRun = $false                                                        # Validate but skip SQL execution
+$DefaultLogFile = "datamasker.log"                                              # Optional log file path
 #endregion
 
 $ErrorActionPreference = "Stop"
