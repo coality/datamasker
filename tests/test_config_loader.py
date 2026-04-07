@@ -223,11 +223,13 @@ class TestConfigLoaderInvalid:
             assert "padLength" in str(exc_info.value.message)
             assert "integer" in str(exc_info.value.message)
 
-    def test_invalid_masking_format_missing_placeholder(self):
-        """Test that invalid masking format without column placeholder raises error."""
+    def test_invalid_masking_format_empty_string(self):
+        """Test that empty masking format raises error."""
         config_data = {
-            "global": {"maskingFormat": "<{counter}>", "padLength": 4},
-            "maskingRules": [],
+            "global": {"maskingFormat": "", "padLength": 4},
+            "maskingRules": [
+                {"schema": "dbo", "table": "T", "column": "C", "orderBy": "ID"}
+            ],
         }
 
         with TemporaryDirectory() as tmpdir:
@@ -238,7 +240,7 @@ class TestConfigLoaderInvalid:
             with pytest.raises(ConfigurationError) as exc_info:
                 loader.load(config_path)
             assert "maskingFormat" in str(exc_info.value.message)
-            assert "placeholder" in str(exc_info.value.message)
+            assert "non-empty" in str(exc_info.value.message)
 
     def test_empty_masking_rules(self):
         """Test that empty maskingRules array raises ConfigurationError."""

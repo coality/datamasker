@@ -78,7 +78,7 @@ The functional configuration file (`sample.masking.json`) defines which columns 
 ```json
 {
   "global": {
-    "maskingFormat": "<{column}_{counter}>",
+    "maskingFormat": "MASKED_{column}_{counter}",
     "padLength": 4
   },
   "maskingRules": [
@@ -93,7 +93,7 @@ The functional configuration file (`sample.masking.json`) defines which columns 
 ```
 
 **Fields**:
-- `global.maskingFormat`: Template for mask values. Must contain `<{column}>` placeholder.
+- `global.maskingFormat`: Template for mask values. Supports `{column}` and `{counter}` placeholders (e.g. `MASKED_{column}_{counter}`).
 - `global.padLength`: Zero-padding length for the counter (must be strictly positive integer).
 - `maskingRules`: Array of rules. Each rule requires: `schema`, `table`, `column`, `orderBy`.
 
@@ -453,7 +453,7 @@ Create `config.masking.json`:
 ```json
 {
   "global": {
-    "maskingFormat": "<{column}_{counter}>",
+    "maskingFormat": "MASKED_{column}_{counter}",
     "padLength": 4
   },
   "maskingRules": [

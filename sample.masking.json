@@ -1,6 +1,6 @@
 {
   "global": {
-    "maskingFormat": "<{column}_{counter}>",
+    "maskingFormat": "MASKED_{column}_{counter}",
     "padLength": 4
   },
   "maskingRules": [

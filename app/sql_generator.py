@@ -59,7 +59,14 @@ class SQLGenerator:
         )
 
         column_upper = rule.column.upper()
-        mask_value = "'<" + column_upper + "_' + " + pad_expr + " + '>'"
+        parts = masking_format.split("{counter}")
+        sql_parts = []
+        for i, part in enumerate(parts):
+            if part:
+                sql_parts.append("'" + part.replace("{column}", column_upper) + "'")
+            if i < len(parts) - 1:
+                sql_parts.append(pad_expr)
+        mask_value = " + ".join(sql_parts)
 
         sql = """-- ===============================================
 -- MASKING RULE

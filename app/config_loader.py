@@ -91,11 +91,9 @@ class ConfigLoader:
                 "maskingFormat in {} must be a non-empty string".format(source)
             )
 
-        if "<{column" not in masking_format or "<{" not in masking_format:
+        if not isinstance(masking_format, str) or not masking_format:
             raise ConfigurationError(
-                "maskingFormat in {} must contain '<{{column}}' placeholder".format(
-                    source
-                )
+                "maskingFormat in {} must be a non-empty string".format(source)
             )
 
         pad_length = global_data.get("padLength")
